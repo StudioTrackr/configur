@@ -1,0 +1,26 @@
+[default]
+project_name = "configur"
+
+    [default.slack]
+    app_name = "Test App"
+    api_token = "ssm:/configur/slack-api-token"
+
+[local]
+    [local.slack]
+    channel_id = "C123X45FXKM"
+    enabled = false
+
+[dev]
+    [dev.slack]
+    channel_id = "C123X45FXKM"
+    enabled = true
+
+[qa]
+    [qa.slack]
+    channel_id = "C123X45FXKM"
+    enabled = true
+
+[prod]
+    [prod.slack]
+    channel_id = "C678X90FXKM"
+    enabled = true

@@ -17,7 +17,7 @@ class Settings:
     dot notation (settings.snowflake.password). Reads from toml file and requires a table/section
     called 'default', along with a table/section for each environment, e.g. [local], [dev], [prod].
     Supports nested tables with dot notation, e.g. [local.snowflake].
-    Inspired by ConfigParser and dot notation implementation borrowed from DynaConf
+    Inspired by ConfigParser and DynaConf.
     """
 
     TOML_TO_BUILTIN_MAP = {
@@ -32,7 +32,7 @@ class Settings:
     def __init__(self, config_filepath: str = None, env: str = os.getenv("PROJECT_ENV", "local")):
         self._store = Box()
         self.env = env
-        self._ssm = boto3.client("ssm", region_name="us-east-1")
+        self._ssm = boto3.client("ssm")
 
         # Load from .env file if exists. Will set env variables for use in .ini files.
         load_dotenv(find_dotenv(usecwd=True), verbose=True)
@@ -61,46 +61,63 @@ class Settings:
         self._store = Box()
 
     def _set_value_from_config(self, name: str, value: Any, parent: str = None):
+        # If an env var exists, it takes precedence over everything else
         if name.upper() in os.environ and not parent:
             self.set_attr(name, os.getenv(name.upper()), parent)
+        # Or if there's an env var for nested child attr, such as PARENT_CHILD, it takes precedence over orig value
         elif parent and f"{parent.upper()}_{name.upper()}" in os.environ:
-            attr = os.getenv(f"{parent.upper()}_{name.upper()}")
-            try:
-                if type(value) in self.TOML_TO_BUILTIN_MAP:
-                    attr = self.TOML_TO_BUILTIN_MAP[type(value)](attr)
-                elif type(value) == bool:
-                    attr = attr.lower() == "true"
-                else:
-                    attr = type(value)(attr)
-            except ValueError:
-                logger.info(f"Could not cast setting {parent}.{name} with value {attr} to type {type(value)}")
-                pass
-            self.set_attr(name, attr, parent)
+            self._set_from_parent_env_var(name, value, parent)
+        # If the value is a dict, recursively call this fcn to un-nest it's fields and set them.
         elif isinstance(value, dict):
             for k, v in value.items():
                 self._set_value_from_config(k, v, name)
-        elif isinstance(value, int) or isinstance(value, float):
-            self.set_attr(name, value, parent)
+        # If the value defined in toml is "${MY_VAR}", it must be set from env var. Check it exists and set it.
         elif isinstance(value, str) and value.startswith("${") and value.endswith("}"):
-            # Expecting environment variable with the value between ${}
-            var_name = re.findall(r'\${(.*?)}', value)[0]
-
-            if var_name in os.environ:
-                self.set_attr(name, os.getenv(var_name), parent)
+            self._set_from_env_var_interpolation(name, value, parent)
+        # If value defined with "ssm:" prefix, try fetching it from SSM parameter store.
         elif isinstance(value, str) and value.startswith("ssm:"):
-            try:
-                param = self._ssm.get_parameter(
-                    Name=value.replace("ssm:", ""),
-                    WithDecryption=True
-                )
-
-                if param.get("Parameter"):
-                    self.set_attr(name, param["Parameter"]["Value"], parent)
-            except ClientError as e:
-                # Best effort to load parameter
-                logger.error(e)
+            self._set_from_ssm(name, value, parent)
+        # Otherwise, it should be standard type that can be set directly.
         else:
             self.set_attr(name, value, parent)
+
+    def _set_from_env_var_interpolation(self, name: str, value: Any, parent: str = None):
+        """Expecting environment variable with the value between ${}. If not found, variable is set to None."""
+        var_name = re.findall(r'\${(.*?)}', value)[0]
+
+        if var_name in os.environ:
+            self.set_attr(name, os.getenv(var_name), parent)
+        else:
+            self.set_attr(name, None, parent)
+
+    def _set_from_parent_env_var(self, name: str, value: Any, parent: str = None):
+        """Allows overriding nested attributes by setting env var as PARENT_CHILD."""
+        attr = os.getenv(f"{parent.upper()}_{name.upper()}")
+        try:
+            if type(value) in self.TOML_TO_BUILTIN_MAP:
+                attr = self.TOML_TO_BUILTIN_MAP[type(value)](attr)
+            elif type(value) == bool:
+                attr = attr.lower() == "true"
+            else:
+                attr = type(value)(attr)
+        except ValueError:
+            logger.info(f"Could not cast setting {parent}.{name} with value {attr} to type {type(value)}")
+            pass
+        self.set_attr(name, attr, parent)
+
+    def _set_from_ssm(self, name: str, value: Any, parent: str = None):
+        """Gets parameter from ssm, where value starts with `ssm:` """
+        try:
+            param = self._ssm.get_parameter(
+                Name=value.replace("ssm:", ""),
+                WithDecryption=True
+            )
+
+            if param.get("Parameter"):
+                self.set_attr(name, param["Parameter"]["Value"], parent)
+        except ClientError as e:
+            # Best effort to load parameter
+            logger.error(e)
 
     def set_attr(self, name: str, value: Any, parent: str = None):
         if type(value) in self.TOML_TO_BUILTIN_MAP:

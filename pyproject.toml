@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "configur"
-version = "0.1.4"
+version = "0.1.5"
 description = "TOML-based configuration for Python"
 authors = ["Studio Trackr <info@studiotrackr.com>"]
 license = "MIT"
@@ -20,6 +20,9 @@ tomlkit = "^0.7.2"
 python-dotenv = "^0.18.0"
 
 [tool.poetry.dev-dependencies]
+moto = {version = "^2.1.0", extras = ["ssm"]}
+pytest = "^6.2.4"
+pytest-cov = "^2.12.1"
 
 [build-system]
 requires = ["poetry-core>=1.0.0"]

@@ -9,14 +9,16 @@
 
 
 #### Configuration
-Configuration variables are stored in a single toml file. The default is expecting a file called `settings.toml`,
-but you can set a custom path as needed. 
+All configuration is defined in a single TOML file, e.g., `settings.toml` or `config.toml`. See
+the [example](https://github.com/StudioTrackr/configur/blob/main/example.toml) for a better idea of how it's structured.
 
 Certain secrets (e.g. passwords) that should not be checked into Git can be interpolated from
 environment variables. If you declared an item as `my_var = "${EXAMPLE_VALUE}"`, you will
-need to have an environment variable `EXAMPLE_VALUE` defined. To avoid
-passing secrets in plaintext in the run environment, you can also define variables in AWS Systems Manager
-Parameter Store (SSM). To do so, simply prefix the value with `ssm:` and the code will automatically
+need to have an environment variable `EXAMPLE_VALUE` defined. Configur also come with `dotenv`, so feel free
+to define a `.env` file for storing these environment variables.
+
+To avoid passing secrets in plaintext in the run environment, you can also define variables in AWS Systems Manager
+Parameter Store (SSM). To do so, simply prefix the value with `ssm:` in the TOML file, and the code will automatically
 fetch and decode the param at runtime, assuming the proper credentials are available to get and decrypt the parameter.
 
 These configuration files are parsed by the [TOML Kit](https://github.com/sdispater/tomlkit) library, and then stored 
@@ -60,7 +62,7 @@ output_file_name = "example.csv"
 Read more below for how these values are accessed in Settings.
 
 #### Settings
-The [Settings](configur/config.py) class reads `settings.toml` files, and sets attributes on itself for 
+The [Settings](https://github.com/StudioTrackr/configur/blob/main/configur/config.py) class reads `settings.toml` files, and sets attributes on itself for 
 every item in the config file. However, it will only ever load settings from the `default` table and the table (and its children) matching 
 the current environment, e.g., `local`. The environment **must** be set with a variable `PROJECT_ENV`, otherwise the fallback 
 is `local` so nothing will ever touch production by accident. The value of this variable needs to match a corresponding section in your `settings.toml` file,
