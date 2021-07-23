@@ -1,15 +1,21 @@
-import boto3
 import logging
 import os
 import re
 from typing import Any
 
-from botocore.exceptions import ClientError
 from box import Box
 from dotenv import find_dotenv, load_dotenv
 from tomlkit import parse, items
 
 logger = logging.getLogger(__name__)
+
+try:
+    import boto3
+    from botocore.exceptions import ClientError
+    _boto_available = True
+except ImportError:
+    logger.warning("boto3 is not installed - install it to use SSM parameters.")
+    _boto_available = False
 
 
 class Settings:
@@ -32,7 +38,7 @@ class Settings:
     def __init__(self, config_filepath: str = None, env: str = os.getenv("PROJECT_ENV", "local")):
         self._store = Box()
         self.env = env
-        self._ssm = boto3.client("ssm")
+        self._ssm = boto3.client("ssm") if _boto_available else None
 
         # Load from .env file if exists. Will set env variables for use in .ini files.
         load_dotenv(find_dotenv(usecwd=True), verbose=True)
@@ -107,6 +113,9 @@ class Settings:
 
     def _set_from_ssm(self, name: str, value: Any, parent: str = None):
         """Gets parameter from ssm, where value starts with `ssm:` """
+        if not _boto_available:
+            raise ImportError("boto3 not available and is required to read from SSM.")
+
         try:
             param = self._ssm.get_parameter(
                 Name=value.replace("ssm:", ""),
